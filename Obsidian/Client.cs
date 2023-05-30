@@ -148,7 +148,7 @@ public sealed class Client : IDisposable
     /// <summary>
     /// Used to log actions caused by the client.
     /// </summary>
-    public ILogger Logger => Server.Logger;
+    public ILogger Logger => null;
 
     /// <summary>
     /// The player that the client is logged in as.
@@ -158,7 +158,6 @@ public sealed class Client : IDisposable
     /// <summary>
     /// The server that the client is connected to.
     /// </summary>
-    public Server Server { get; private set; }
 
     /// <summary>
     /// The client brand. This is the name that the client used to identify itself (Fabric, Forge, Quilt, etc.)
@@ -170,7 +169,7 @@ public sealed class Client : IDisposable
         this.socket = socket;
         this.config = config;
         id = playerId;
-        Server = originServer;
+        //Server = originServer;
 
         LoadedChunks = new();
         packetCryptography = new();
@@ -289,11 +288,9 @@ public sealed class Client : IDisposable
                                     return;
                                 }
                             }
-                            else
-                            {
-                                SetConnectionThrottleTime(ip);
-                                await HandleLoginStartAsync(data);
-                            }
+                            
+                            SetConnectionThrottleTime(ip);
+                            await HandleLoginStartAsync(data);
 
                             break;
                         case 0x01:
