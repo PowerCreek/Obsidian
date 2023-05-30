@@ -7,7 +7,7 @@ public static class CommandsRegistry
 {
     internal static CommandsPacket Packet = new();
 
-    public static void Register(Server server)
+    public static void Register(Commands.Framework.CommandHandler commandsHandler)
     {
         Packet = new();
         var index = 0;
@@ -18,7 +18,7 @@ public static class CommandsRegistry
             Index = index
         };
 
-        foreach (var cmd in server.CommandsHandler.GetAllCommands())
+        foreach (var cmd in commandsHandler.GetAllCommands())
         {
             var cmdNode = new CommandNode()
             {
@@ -46,7 +46,7 @@ public static class CommandsRegistry
 
                     var type = arg.ParameterType;
 
-                    var (id, mctype) = server.CommandsHandler.FindMinecraftType(type);
+                    var (id, mctype) = commandsHandler.FindMinecraftType(type);
 
                     argNode.Parser = mctype switch
                     {
@@ -70,4 +70,6 @@ public static class CommandsRegistry
 
         Packet.AddNode(node);
     }
+
+    public static void Register(Server server) => Register(server.CommandsHandler);
 }
