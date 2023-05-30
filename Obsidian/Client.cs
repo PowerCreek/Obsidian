@@ -225,8 +225,17 @@ public sealed class Client : IDisposable
         return (packetId, packetData);
     }
 
+    public Func<bool> ConnectionThrottlingEnabled { get; init; } = () => false;
+    
+    //return the value datetimeoffset from ip string.
+    public Func<string, DateTimeOffset?> GetConnectionThrottleTime { get; init; } = _ => DateTimeOffset.UtcNow.AddMilliseconds(-100);
+    
+    //Store the ip string as a key, the value is a datetimeoffset of 15 seconds.
+    public Action<string> SetConnectionThrottleTime { get; init; } = (_) => { };
+
     public async Task StartConnectionAsync()
     {
+
         while (!cancellationSource.IsCancellationRequested && socket.Connected)
         {
             (var id, var data) = await GetNextPacketAsync();
@@ -262,29 +271,31 @@ public sealed class Client : IDisposable
                     switch (id)
                     {
                         case 0x00:
-                        {
-                            if (this.Server.Config.CanThrottle)
+                            if (!ConnectionThrottlingEnabled())
                             {
-                                string ip = ((IPEndPoint)socket.RemoteEndPoint!).Address.ToString();
-
-                                if (Server.throttler.TryGetValue(ip, out var timeLeft))
-                                {
-                                    if (DateTimeOffset.UtcNow < timeLeft)
-                                    {
-                                        this.Logger.LogDebug("{ip} has been throttled for reconnecting too fast.", ip);
-                                        await this.DisconnectAsync("Connection Throttled! Please wait before reconnecting.");
-                                        this.Disconnect();
-                                    }
-                                }
-                                else
-                                {
-                                    Server.throttler.TryAdd(ip, DateTimeOffset.UtcNow.AddMilliseconds(this.Server.Config.ConnectionThrottle));
-                                }
+                                await HandleLoginStartAsync(data);
+                                break;
                             }
 
-                            await HandleLoginStartAsync(data);
+                            string ip = ((IPEndPoint)socket.RemoteEndPoint!).Address.ToString();
+
+                            if (GetConnectionThrottleTime(ip) is DateTimeOffset timeLeft)
+                            {
+                                if (DateTimeOffset.UtcNow < timeLeft)
+                                {
+                                    this.Logger.LogDebug("{ip} has been throttled for reconnecting too fast.", ip);
+                                    await this.DisconnectAsync("Connection Throttled! Please wait before reconnecting.");
+                                    this.Disconnect();
+                                    return;
+                                }
+                            }
+                            else
+                            {
+                                SetConnectionThrottleTime(ip);
+                                await HandleLoginStartAsync(data);
+                            }
+
                             break;
-                        }
                         case 0x01:
                             await HandleEncryptionResponseAsync(data);
                             break;
