@@ -363,7 +363,6 @@ public class MainCommandModule
             if (player.WorldLocation.Name.EqualsIgnoreCase(worldname))
             {
                 await player.SendMessageAsync("You can't switch to a world you're already in!");
-
                 return;
             }
 
