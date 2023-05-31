@@ -8,10 +8,10 @@ public record SocketHandler(
     NetworkMetadata Metadata,
     ApplicationLifetimeStoppingTokenSource TokenSource,
     IClientConnectedCallback ClientConnectedCallback
-    ) : ICompoundService<SocketHandler>
+    )
 {
     public static ICompoundService<SocketHandler>.RegisterServices Register = services => services
-        .WithSingleton(ApplicationLifetimeStoppingTokenSource.AddServiceDelegate)
+        .WithSingleton(ApplicationLifetimeStoppingTokenSource.AddServiceItem)
         .WithSingleton<IClientConnectedCallback, ClientConnectedCallback>()
         .WithSingleton<SocketHandler>();
 
