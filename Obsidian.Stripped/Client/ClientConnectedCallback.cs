@@ -4,6 +4,8 @@ using Obsidian.Stripped.EventPackets;
 using Obsidian.Stripped.Host;
 using Obsidian.Stripped.Utilities;
 using Obsidian.Stripped.Utilities.Collections;
+using Obsidian.Stripped.Utilities.EventSystem;
+using System.Diagnostics;
 using System.Net.Sockets;
 
 namespace Obsidian.Stripped.Client;
@@ -12,21 +14,17 @@ public record ClientConnectedCallback(
     ILogger<ClientConnectedCallback> Logger,
     Indexer Indexer,
     AsyncQueueFeed<IClientInstance> ClientCreationFeed,
-    Func<ClientPacketInit> CreatePacketInit,
     GetClientInstance<object> GetClientInstance
     ) : IClientConnectedCallback
 {
     public static ICompoundService<ClientConnectedCallback>.RegisterServices Register = services => services
             .WithSingleton<Indexer>()
-            .With(ClientPacketInit.Register)
             .With(GetClientInstance<object>.Register)
-            .WithSingleton<Func<ClientPacketInit>>(s => () => s.GetRequiredService<ClientPacketInit>())
             .WithSingleton<AsyncQueueFeed<IClientInstance>>()
             .WithSingleton<ClientConnectedCallback>();
-
+            
     private Indexer Indexer { get; } = Indexer;
     private AsyncQueueFeed<IClientInstance>? ClientCreationFeed { get; } = ClientCreationFeed;
-    
     private GetClientInstance<object> GetClientInstance { get; } = GetClientInstance;
     public Action<Socket> Callback { get; } = socket =>
     {

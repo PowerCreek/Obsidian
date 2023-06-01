@@ -1,44 +1,39 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Obsidian.Stripped.Host;
-using Obsidian.Stripped.Utilities.Collections;
-using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Obsidian.Stripped.EventPackets;
 
-
-/// <summary>
-/// Needs to gather the connection collection
-/// </summary>
 public record ClientWorker(
-    AsyncQueueFeed<IClientInstance> ClientCreationFeed,
-    ConcurrentDictionary<int, IClientInstance> ClientMap,
+    ClientInstanceFeedProcessor ClientInstanceFeedProcessor,
+    ClientInstanceUpdateLoop ClientInstanceUpdateLoop,
     ILogger<ClientWorker> Logger
     ) : IHostedService, IDisposable
 {
-    public static ICompoundService<ClientWorker>.RegisterServices Register = services =>
-        services.WithSingleton<AsyncQueueFeed<IClientInstance>>()
-        .WithSingleton<ConcurrentDictionary<int, IClientInstance>>()
+    public static ICompoundService<ClientWorker>.RegisterServices Register = services => services
+        .With(ClientInstanceUpdateLoop.Register)
+        .With(ClientInstanceFeedProcessor.Register)
         .WithHostedService<ClientWorker>();
 
-    private AsyncQueueFeed<IClientInstance> ClientCreationFeed { get; } = ClientCreationFeed;
-    private ConcurrentDictionary<int, IClientInstance> ClientMap { get; } = ClientMap;
+    private ClientInstanceFeedProcessor ClientInstanceFeedProcessor { get; } = ClientInstanceFeedProcessor;
+    private ClientInstanceUpdateLoop ClientInstanceUpdateLoop { get; } = ClientInstanceUpdateLoop;
 
-    public void Dispose() { }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        Task[] tasks = new[] {
+            ClientInstanceUpdateLoop.LoopInstances(),
+            ClientInstanceFeedProcessor.LoopFeed()
+        };
 
-        await foreach (var client in ClientCreationFeed.ConsumeFeedAsync())
-        {
-            Logger.LogInformation($"Connected {client.Id}:");
-        }
-
-        await Task.CompletedTask;
+        await Task.WhenAll(tasks);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         await Task.CompletedTask;
     }
+    public void Dispose() { }
 }
