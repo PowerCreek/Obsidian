@@ -1,37 +1,36 @@
 ﻿using Microsoft.Extensions.Logging;
 using Obsidian.Stripped.Host;
+using Obsidian.Stripped.Utilities.Collections;
 using System.Net.Sockets;
 
 namespace Obsidian.Stripped.Client;
 
 public record ClientConnectedCallback(
-    ILogger<ClientConnectedCallback> logger,
-    ClientConnectionCollection collection,
-    ClientPacketFactory factory) : IClientConnectedCallback
+    ILogger<ClientConnectedCallback> Logger,
+    ClientConnectionCollection ClientCollection,
+    ClientPacketFactory Factory,
+    AsyncQueueFeed<ClientInstance> ClientCreationFeed) : IClientConnectedCallback
 {
     public static ICompoundService<ClientConnectedCallback>.RegisterServices Register = services => services
             .WithSingleton<ClientConnectionCollection>()
             .WithSingleton<ClientPacketFactory>()
+            .WithSingleton<AsyncQueueFeed<ClientInstance>>()
             .WithSingleton<ClientConnectedCallback>();
 
-    private ClientConnectionCollection? collection { get; } = collection;
-    private ClientPacketFactory? factory { get; }
+    private ClientConnectionCollection? ClientCollection { get; } = ClientCollection;
+    private AsyncQueueFeed<ClientInstance>? ClientCreationFeed { get; } = ClientCreationFeed;
+    private ClientPacketFactory? Factory { get; }
     public Action<Socket> Callback { get; } = socket =>
     {
-        logger.LogInformation("Test");
+        Logger.LogInformation("Socket Info: " + socket.RemoteEndPoint);
+        var result = ClientCollection.CreateClientInstance(new
+        (
+                Socket: socket,
+                PacketQueue: Factory.CreateQueueInstance()
+        ));
 
-        try
-        {
-            collection.CreateClientInstance(new
-            (
-                    Socket: socket,
-                    PacketQueue: factory.CreateQueueInstance()
-            ));
+        Logger.LogInformation("Collection: " + ClientCollection.ClientIdIndexer.GetContents());
 
-            logger.LogInformation("Collection: " + collection.ClientIdIndexer.GetContents());
-        } catch (Exception e)
-        {
-            logger.LogError(e.ToString());
-        }
+        ClientCreationFeed.Enqueue(result);
     };
 }

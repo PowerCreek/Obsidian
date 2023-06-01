@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Obsidian.Stripped.Host;
-internal class ObsidianServerHost : BackgroundService
+public class ObsidianServerHost : BackgroundService
 {
     public static ICompoundService<ObsidianServerHost>.RegisterServices Register = services =>
         services.WithSingleton<SocketHandler>()

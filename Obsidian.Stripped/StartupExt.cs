@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Obsidian.Stripped.Client;
+using Obsidian.Stripped.EventPackets;
 using Obsidian.Stripped.Host;
 
 namespace Obsidian.Stripped;
@@ -16,8 +17,9 @@ public static class StartupExt
         .With(ClientPacketFactory.Register)
         .With(ClientConnectedCallback.Register)
         .With(SocketHandler.Register)
-        .With(ObsidianServerHost.Register);
-
+        .With(ObsidianServerHost.Register)
+        .With(EventPacketFeed.Register)
+        ;
         return services;
     }
 

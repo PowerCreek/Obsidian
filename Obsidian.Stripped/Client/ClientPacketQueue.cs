@@ -13,7 +13,7 @@ public record ClientPacketQueue(ApplicationLifetimeStoppingTokenSource LifetimeT
 {
     public static ICompoundService<ClientPacketQueue>.RegisterServices Register => services =>
         services.WithSingleton(ApplicationLifetimeStoppingTokenSource.AddServiceItem)
-        .WithSingleton<ClientPacketQueue>();
+        .WithTransient<ClientPacketQueue>();
 
     private ApplicationLifetimeStoppingTokenSource LifetimeTokenSource { get; } = LifetimeTokenSource;
     
