@@ -1,5 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Obsidian.Stripped.EventPackets;
 using Obsidian.Stripped.Host;
+using Obsidian.Stripped.Utilities;
 using Obsidian.Stripped.Utilities.Collections;
 using System.Net.Sockets;
 
@@ -7,30 +10,41 @@ namespace Obsidian.Stripped.Client;
 
 public record ClientConnectedCallback(
     ILogger<ClientConnectedCallback> Logger,
-    ClientConnectionCollection ClientCollection,
-    ClientPacketFactory Factory,
-    AsyncQueueFeed<IClientInstance> ClientCreationFeed) : IClientConnectedCallback
+    Indexer Indexer,
+    AsyncQueueFeed<IClientInstance> ClientCreationFeed,
+    Func<ClientPacketInit> CreatePacketInit,
+    GetClientInstance<object> GetClientInstance
+    ) : IClientConnectedCallback
 {
     public static ICompoundService<ClientConnectedCallback>.RegisterServices Register = services => services
-            .With(ClientConnectionCollection.Register)
-            .WithSingleton<ClientPacketFactory>()
+            .WithSingleton<Indexer>()
+            .With(ClientPacketInit.Register)
+            .With(GetClientInstance<object>.Register)
+            .WithSingleton<Func<ClientPacketInit>>(s => () => s.GetRequiredService<ClientPacketInit>())
             .WithSingleton<AsyncQueueFeed<IClientInstance>>()
             .WithSingleton<ClientConnectedCallback>();
 
-    private ClientConnectionCollection? ClientCollection { get; } = ClientCollection;
+    private Indexer Indexer { get; } = Indexer;
     private AsyncQueueFeed<IClientInstance>? ClientCreationFeed { get; } = ClientCreationFeed;
-    private ClientPacketFactory? Factory { get; }
+    
+    private GetClientInstance<object> GetClientInstance { get; } = GetClientInstance;
     public Action<Socket> Callback { get; } = socket =>
     {
         Logger.LogInformation("Socket Info: " + socket.RemoteEndPoint);
-        var result = ClientCollection.CreateClientInstance(new
-        (
-                Socket: socket,
-                PacketQueue: Factory.CreateQueueInstance()
-        ));
 
-        Logger.LogInformation("Collection: " + ClientCollection.ClientIdIndexer.GetContents());
+        var result = InitializeClient(socket);
 
         ClientCreationFeed.Enqueue(result);
+
+        IClientInstance InitializeClient(Socket socket)
+        {
+            var NextId = Indexer.GetAvailableTag();
+
+            var instance = GetClientInstance.ClientInstance(NextId, new ClientStreamInterop(socket));
+
+            Logger.LogInformation("Collection: " + Indexer.GetContents());
+
+            return instance;
+        }
     };
 }

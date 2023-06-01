@@ -14,7 +14,6 @@ public static class StartupExt
         services.AddLogging();
 
         services.AddTransient((s) => new NetworkMetadata(Port: 12444))
-        .With(ClientPacketFactory.Register)
         .With(ClientConnectedCallback.Register)
         .With(SocketHandler.Register)
         .With(ObsidianServerHost.Register)
@@ -24,10 +23,60 @@ public static class StartupExt
     }
 
     public static IServiceCollection With<TDelegate>(this IServiceCollection services, TDelegate registerServices)
-        where TDelegate : Delegate => (IServiceCollection) registerServices.DynamicInvoke(services)!;
+        where TDelegate : Delegate => (IServiceCollection)registerServices.DynamicInvoke(services)!;
 
     public static IServiceCollection WithHostedService<TService>(this IServiceCollection services)
         where TService : class, IHostedService => services.AddHostedService<TService>();
+
+    public static IServiceCollection TryWrapSingleton(this IServiceCollection services, Action<IServiceCollection> action)
+    {
+        action(services);
+        return services;
+    }
+
+    public static IServiceCollection WithSingleton<TService>(this IServiceCollection services, Func<IServiceProvider, TService> func)
+        where TService : class
+    {
+        services.TryAddSingleton(func);
+        return services;
+    }
+
+    public static IServiceCollection WithScoped<TService>(this IServiceCollection services, Func<IServiceProvider, TService> func)
+        where TService : class
+    {
+        services.TryAddScoped(func);
+        return services;
+    }
+
+    public static IServiceCollection WithTransient<TService>(this IServiceCollection services, Func<IServiceProvider, TService> func)
+        where TService : class
+    {
+        services.TryAddTransient(func);
+        return services;
+    }
+
+    public static IServiceCollection WithSingleton<TService, TImplementation>(this IServiceCollection services, Func<IServiceProvider, TImplementation> func)
+        where TService : class
+        where TImplementation : class, TService
+    {
+        services.TryAddSingleton<TService>(func);
+        return services;
+    }
+
+    public static IServiceCollection WithScoped<TService, TImplementation>(this IServiceCollection services, Func<IServiceProvider, TImplementation> func)
+        where TService : class
+        where TImplementation : class, TService
+    {
+        services.TryAddScoped<TService>(func);
+        return services;
+    }
+    public static IServiceCollection WithTransient<TService, TImplementation>(this IServiceCollection services, Func<IServiceProvider, TImplementation> func)
+        where TService : class
+        where TImplementation : class, TService
+    {
+        services.TryAddTransient<TService>(func);
+        return services;
+    }
 
     public static IServiceCollection WithSingleton<TDelegate>(this IServiceCollection services, TDelegate func)
         where TDelegate : Delegate
@@ -61,7 +110,7 @@ public static class StartupExt
     }
 
     public static IServiceCollection WithScoped<TService>(this IServiceCollection services)
-        where TService : class 
+        where TService : class
     {
         services.TryAddScoped<TService>();
         return services;
@@ -84,11 +133,11 @@ public static class StartupExt
 
     public static IServiceCollection WithScoped<TService, TImplementation>(this IServiceCollection services)
         where TService : class
-        where TImplementation : class, TService 
+        where TImplementation : class, TService
     {
         services.TryAddScoped<TService, TImplementation>();
         return services;
-    } 
+    }
 
     public static IServiceCollection WithTransient<TService, TImplementation>(this IServiceCollection services)
         where TService : class

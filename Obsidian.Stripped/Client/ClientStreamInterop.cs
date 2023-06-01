@@ -1,22 +1,17 @@
-﻿using Microsoft.Extensions.Hosting;
-using Obsidian.Net;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Obsidian.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
 
 namespace Obsidian.Stripped.Client;
-public class ClientStreamInterop
+public record ClientStreamInterop
 {
-    private NetworkStream _stream;
-    private MinecraftStream _minecraftStream;
-
+    private NetworkStream _stream { get; }
+    private MinecraftStream _minecraftStream { get; }
+    public Socket Socket { get; }
+    
     public ClientStreamInterop(Socket socket)
     {
         _stream = new (socket);
         _minecraftStream = new MinecraftStream(_stream);
+        Socket = socket;
     }
 }

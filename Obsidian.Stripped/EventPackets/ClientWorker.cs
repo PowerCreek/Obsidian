@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Obsidian.Stripped.Client;
 using Obsidian.Stripped.Host;
 using Obsidian.Stripped.Utilities.Collections;
 using System.Collections.Concurrent;
