@@ -1,39 +1,52 @@
-﻿using Obsidian.Stripped.Host;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Obsidian.Stripped.EventPackets;
+using Obsidian.Stripped.Host;
 using Obsidian.Stripped.Utilities;
+using Obsidian.Stripped.Utilities.Collections;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Threading.Tasks.Dataflow;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Obsidian.Stripped.Client;
 
-public class ClientConnectionCollection
+public record ClientConnectionCollection(
+    ILogger<ClientConnectionCollection> Logger,
+    ClientPacketInitFactory PacketInitFactory
+    )
 {
-    public Indexer ClientIdIndexer = new Indexer();
-    public ConcurrentDictionary<int, ClientInstance> ClientInstanceMap { get; init; } = new();
+    public static ICompoundService<ClientConnectionCollection>.RegisterServices Register = services => services
+            .With(ClientPacketInitFactory.Register)
+            .WithSingleton<ClientConnectionCollection>();
 
-    //TODO
-    //add action in the input properties here.
+    private ILogger<ClientConnectionCollection> Logger { get; } = Logger;
+    private ClientPacketInitFactory PacketInitFactory { get; } = PacketInitFactory;
+
+    public Indexer ClientIdIndexer = new Indexer();
+
     public record ClientInstanceCreationInput(Socket Socket, ClientPacketQueue PacketQueue)
     {
         public ClientStreamInterop ClientStreamInterop => new(Socket);
-        public BufferBlock<T> GetBufferBlock<T>(Action<T> action) => PacketQueue.SetupPacketQueue<T>(action);
+        public BufferBlock<T> GetBufferBlock<T>(PacketAction<T> action)
+        {
+            return PacketQueue.SetupPacketQueue<T>(data =>
+            {
+                if (Socket.Connected)
+                {
+                    action(data);
+                }
+            });
+        } 
     }
 
-    public ClientInstance CreateClientInstance(ClientInstanceCreationInput input)
+    public IClientInstance CreateClientInstance(ClientInstanceCreationInput input)
     {
         var clientId = ClientIdIndexer.GetAvailableTag();
 
-        var block = input.GetBufferBlock<object>(data =>
-        {
-            if (input.Socket.Connected)
-            {
+        var block = input.GetBufferBlock(PacketInitFactory.PerformPacketSend<object>());
 
-            }
-        });
-
-        var instance = new ClientInstance(Id: clientId, ClientStreamInterop: input.ClientStreamInterop, block);
-
-        ClientInstanceMap.TryAdd(clientId, instance);
+        var instance = IClientInstance.CreateClientInstance(Id: clientId, ClientStreamInterop: input.ClientStreamInterop, block);
 
         return instance;
     }

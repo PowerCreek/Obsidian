@@ -9,16 +9,16 @@ public record ClientConnectedCallback(
     ILogger<ClientConnectedCallback> Logger,
     ClientConnectionCollection ClientCollection,
     ClientPacketFactory Factory,
-    AsyncQueueFeed<ClientInstance> ClientCreationFeed) : IClientConnectedCallback
+    AsyncQueueFeed<IClientInstance> ClientCreationFeed) : IClientConnectedCallback
 {
     public static ICompoundService<ClientConnectedCallback>.RegisterServices Register = services => services
-            .WithSingleton<ClientConnectionCollection>()
+            .With(ClientConnectionCollection.Register)
             .WithSingleton<ClientPacketFactory>()
-            .WithSingleton<AsyncQueueFeed<ClientInstance>>()
+            .WithSingleton<AsyncQueueFeed<IClientInstance>>()
             .WithSingleton<ClientConnectedCallback>();
 
     private ClientConnectionCollection? ClientCollection { get; } = ClientCollection;
-    private AsyncQueueFeed<ClientInstance>? ClientCreationFeed { get; } = ClientCreationFeed;
+    private AsyncQueueFeed<IClientInstance>? ClientCreationFeed { get; } = ClientCreationFeed;
     private ClientPacketFactory? Factory { get; }
     public Action<Socket> Callback { get; } = socket =>
     {

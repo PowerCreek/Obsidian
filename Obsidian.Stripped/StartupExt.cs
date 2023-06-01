@@ -18,7 +18,7 @@ public static class StartupExt
         .With(ClientConnectedCallback.Register)
         .With(SocketHandler.Register)
         .With(ObsidianServerHost.Register)
-        .With(EventPacketFeed.Register)
+        .With(ClientWorker.Register)
         ;
         return services;
     }
