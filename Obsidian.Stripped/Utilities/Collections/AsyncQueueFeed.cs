@@ -97,11 +97,13 @@ public class AsyncQueueFeed<T>
 {
     private ConcurrentQueue<T?> Queue = new();
     private SemaphoreSlim _semaphore = new(0);
+    private ManualResetEventSlim _resetEvent = new(false);
 
     public void Enqueue(T t)
     {
         Queue.Enqueue(t);
         _semaphore.Release();
+        _resetEvent.Set();
     }
 
     public async IAsyncEnumerable<T?> ConsumeFeedAsync([EnumeratorCancellation] CancellationToken token = default)
@@ -111,6 +113,8 @@ public class AsyncQueueFeed<T>
             token.ThrowIfCancellationRequested();
 
             yield return item;
+
+            OnItemConsumed();
         }
     }
 
@@ -120,10 +124,17 @@ public class AsyncQueueFeed<T>
         {
             while (Queue.TryDequeue(out var instance))
                 yield return instance;
+
+            _resetEvent.Reset();
             
             await _semaphore.WaitAsync(token);
             
             token.ThrowIfCancellationRequested();
         }
+    }
+
+    private void OnItemConsumed()
+    {
+        _resetEvent.Wait();
     }
 }
