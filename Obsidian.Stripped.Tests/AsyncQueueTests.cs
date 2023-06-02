@@ -10,9 +10,12 @@ public class AsyncQueueTests
     {
         var testQueue = new AsyncQueue<int>();
 
-        var result = await testQueue.DequeueAsync(timeout: 100);
+        var tokenSource = new CancellationTokenSource();
+        tokenSource.CancelAfter(1000);
 
-        (result is { SucessfulResult: false }).ShouldBeTrue();
+        var result = await testQueue.DequeueAsync(token:tokenSource.Token);
+
+        (result is { Cancelled: true}).ShouldBeTrue();
     }
 
     [Fact(DisplayName = "DequeueEmptyUnblocksOnCancelIfEmpty")]
@@ -34,18 +37,24 @@ public class AsyncQueueTests
         testQueue.Enqueue(testInput[0]);
         testQueue.Enqueue(testInput[1]);
 
-        var result = await testQueue.DequeueAsync(timeout: 100);
+        var tokenSource = new CancellationTokenSource();
+        tokenSource.CancelAfter(100);
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput[0].ShouldBeEquivalentTo(result?.Item);
+        testInput[0].ShouldBeEquivalentTo(result.Item);
 
-        result = await testQueue.DequeueAsync(timeout: 100);
+        tokenSource.TryReset();
+        tokenSource.CancelAfter(100);
+        result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput[1].ShouldBeEquivalentTo(result?.Item);
+        testInput[1].ShouldBeEquivalentTo(result.Item);
 
-        result = await testQueue.DequeueAsync(timeout: 100);
-        result.ShouldBe(AsyncQueue<int>.EmptyResult);
+        tokenSource.TryReset();
+        tokenSource.CancelAfter(100);
+        result = await testQueue.DequeueAsync(token: tokenSource.Token);
+        result.ShouldBe(AsyncQueue<int>.CancelledResult);
     }
 
     [Fact(DisplayName = "DequeueSucceedsBeforeTimeout")]
@@ -56,10 +65,11 @@ public class AsyncQueueTests
         var testQueue = new AsyncQueue<int>();
         testQueue.Enqueue(testInput);
 
-        var result = await testQueue.DequeueAsync(timeout: 100);
+        var tokenSource = new CancellationTokenSource(100);
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput.ShouldBeEquivalentTo(result?.Item);
+        testInput.ShouldBeEquivalentTo(result.Item);
     }
 
     [Fact(DisplayName = "StringTest")]
@@ -70,10 +80,11 @@ public class AsyncQueueTests
         var testQueue = new AsyncQueue<int?>();
         testQueue.Enqueue(testInput!);
 
-        var result = await testQueue.DequeueAsync(timeout: 100);
+        var tokenSource = new CancellationTokenSource(100);
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput.ShouldBeEquivalentTo(result?.Item);
+        testInput.ShouldBeEquivalentTo(result.Item);
     }
 
 
@@ -87,11 +98,12 @@ public class AsyncQueueTests
         var testQueue = new AsyncQueue<int>();
 
         _ = Task.Delay(timeDelay).ContinueWith(t => testQueue.Enqueue(testInput));
-
-        var result = await testQueue.DequeueAsync(timeout: timeout);
+        
+        var tokenSource = new CancellationTokenSource(timeout);
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput.ShouldBeEquivalentTo(result?.Item);
+        testInput.ShouldBeEquivalentTo(result.Item);
     }
 
     [Fact(DisplayName = "DequeueFromPopulatedQueueAndCancellation")]
@@ -103,30 +115,49 @@ public class AsyncQueueTests
 
         var testQueue = new AsyncQueue<int>();
 
-        var cancellationTokenSource = new CancellationTokenSource();
-
         _ = Task.Delay(timeDelay).ContinueWith(t => testQueue.Enqueue(testInput));
 
-        var result = await testQueue.DequeueAsync(cancellationToken: cancellationTokenSource.Token);
+        var tokenSource = new CancellationTokenSource();
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
 
         (result is { SucessfulResult: true }).ShouldBeTrue();
-        testInput.ShouldBeEquivalentTo(result?.Item);
+        testInput.ShouldBeEquivalentTo(result.Item);
     }
 
     [Fact(DisplayName = "CancelDequeueFromPopulatedQueue")]
     public async Task CancelDequeueFromPopulatedQueue()
     {
+        var testInput = 1;
+
+        var testQueue = new AsyncQueue<int?>();
+        testQueue.Enqueue(testInput);
+
+        var tokenSource = new CancellationTokenSource();
+        tokenSource.Cancel();
+        
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
+
+        (result is { Cancelled: true, Item: null}).ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "DequeueFromPopulatedQueueAndCancelled")]
+    public async Task DequeueFromPopulatedQueueAndCancelled()
+    {
         var timeDelay = 50;
         var timeout = timeDelay + 50;
         var testInput = 1;
 
-        var testQueue = new AsyncQueue<int>();
+        var testQueue = new AsyncQueue<int?>();
+        var tokenSource = new CancellationTokenSource();
 
-        var cancellationTokenSource = new CancellationTokenSource(1000);
+        _ = Task.Delay(timeDelay).ContinueWith(t => 
+        {
+            tokenSource.Cancel();
+            testQueue.Enqueue(testInput);
+        });
 
-        var result = await testQueue.DequeueAsync(cancellationToken: cancellationTokenSource.Token);
-
-        (result is { Cancelled: true }).ShouldBeTrue();
+        var result = await testQueue.DequeueAsync(token: tokenSource.Token);
+        
+        (result is { SucessfulResult: false, Item: null }).ShouldBeTrue();
     }
-
 }

@@ -1,100 +1,15 @@
-﻿using Microsoft.CodeAnalysis;
-using Obsidian.Stripped.Host;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading;
+﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 
 namespace Obsidian.Stripped.Utilities.Collections;
-
+public delegate Task<T?> QueueProcessorAsync<T>(bool cancelIfEmpty = false, int? timeout = null, CancellationToken token = default);
 public class AsyncQueue<T>
 {
-    public record struct AsyncDequeuResult(bool SucessfulResult, bool Cancelled, T? Item);
-    public static readonly AsyncDequeuResult EmptyResult = new(false, false, default);
-    public static readonly AsyncDequeuResult CancelledResult = new(false, true, default);
+    public record struct AsyncDequeueResult(bool SucessfulResult, bool Cancelled, T? Item);
+    public static readonly AsyncDequeueResult EmptyResult = new(false, false, default);
+    public static readonly AsyncDequeueResult CancelledResult = new(false, true, default);
 
-    private ConcurrentQueue<T?> Queue = new ();
-    private SemaphoreSlim _semaphore = new(0);
-    private ManualResetEventSlim _resetEvent = new(false);
-
-    public void Enqueue(T t)
-    {
-        Queue.Enqueue(t);
-        _semaphore.Release();
-        _resetEvent.Set();
-    }
-
-    public async Task<AsyncDequeuResult?> DequeueAsync(bool cancelIfEmpty = false, int? timeout = null, CancellationToken cancellationToken = default)
-    {
-        var cancellationTask = Task.Run(() =>
-        {
-            _ = (timeout) switch
-            {
-                int time => cancellationToken.WaitHandle.WaitOne(time),
-                _=> cancellationToken.WaitHandle.WaitOne()
-            };
-
-            cancellationToken.ThrowIfCancellationRequested();
-        });
-
-        var enumerator = ConsumeFeedAsync(cancelIfEmpty).GetAsyncEnumerator();
-        var dequeueResult = enumerator.MoveNextAsync().AsTask();
-
-        await Task.WhenAny(dequeueResult, cancellationTask);
-
-        switch((
-            Cancellation: cancellationTask.IsFaulted,
-            DequeueResult: dequeueResult.IsCompletedSuccessfully,
-            Value: dequeueResult.IsCompleted? (bool?)await dequeueResult : default
-            ))
-        {
-            case { Cancellation: true }:
-                return CancelledResult;
-            case { DequeueResult: true, Value: true }:
-                return new(true, false, enumerator.Current);
-            default:
-                return EmptyResult;
-        };
-    }
-
-    private async IAsyncEnumerable<T?> ConsumeFeedAsync(bool cancelIfEmpty)
-    {
-        await foreach ((bool Succeeded, T? Item) in FeedAsync())
-        {
-            switch((Succeeded,cancelIfEmpty))
-            {
-                case { Succeeded: true }:
-                    yield return Item;
-                        OnItemConsumed();
-                    break;
-                case { cancelIfEmpty: false}:
-                    break;
-                default:
-                    yield break;
-            }            
-        }
-    }
-    
-    private async IAsyncEnumerable<(bool Succeeded,T?)> FeedAsync()
-    {
-        while (true)
-        {
-            while (Queue.TryDequeue(out var instance))
-                yield return (true, instance);
-            yield return default;
-            _resetEvent.Reset();
-            await _semaphore.WaitAsync();
-        }
-    }
-
-    private void OnItemConsumed()
-    {
-        _resetEvent.Wait();
-    }
-}
-
-public class AsyncQueueFeed<T>
-{
     private ConcurrentQueue<T?> Queue = new();
     private SemaphoreSlim _semaphore = new(0);
     private ManualResetEventSlim _resetEvent = new(false);
@@ -106,28 +21,109 @@ public class AsyncQueueFeed<T>
         _resetEvent.Set();
     }
 
-    public async IAsyncEnumerable<T?> ConsumeFeedAsync()
+    public async Task<AsyncDequeueResult> DequeueAsync(bool cancelIfEmpty = false, CancellationToken token = default)
     {
-        await foreach (var item in FeedAsync())
+        try
         {
-            yield return item;
-            OnItemConsumed();
+            token.ThrowIfCancellationRequested();
+
+            await foreach (var item in ConsumeFeedAsync(cancelIfEmpty).WithCancellation(token))
+            {
+                return new(SucessfulResult: true, false, item);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return CancelledResult;
+        }
+
+        return EmptyResult;
+    }
+
+    private async IAsyncEnumerable<T?> ConsumeFeedAsync(bool cancelIfEmpty = false, [EnumeratorCancellation] CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+
+        await foreach ((bool Succeeded, T? Item) in FeedAsync().WithCancellation(token))
+        {
+            switch ((Succeeded, cancelIfEmpty))
+            {
+                case { Succeeded: true }:
+                    yield return Item;
+
+                    OnItemConsumed(token);
+                    break;
+
+                case { cancelIfEmpty: false }:
+                    break;
+
+                default:
+                    yield break;
+            }
+            token.ThrowIfCancellationRequested();
+        }
+
+        token.ThrowIfCancellationRequested();
+    }
+
+    private async IAsyncEnumerable<(bool Succeeded, T?)> FeedAsync([EnumeratorCancellation] CancellationToken token = default)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            do
+            {
+                if(!Queue.TryDequeue(out var instance))
+                    break;
+                
+                yield return (true, instance);
+
+            } while (!token.IsCancellationRequested);
+
+            yield return default;
+
+            _resetEvent.Reset();
+
+            await _semaphore.WaitAsync(token);
         }
     }
 
-    private async IAsyncEnumerable<T?> FeedAsync()
+    private void OnItemConsumed(CancellationToken token)
+    {
+        _resetEvent.Wait(token);
+    }
+}
+
+public class AsyncQueueFeed<T>
+{
+    private ConcurrentQueue<T?> Queue = new();
+    private SemaphoreSlim _semaphore = new(0);
+
+    public void Enqueue(T t)
+    {
+        Queue.Enqueue(t);
+        _semaphore.Release();
+    }
+
+    public async IAsyncEnumerable<T?> ConsumeFeedAsync([EnumeratorCancellation] CancellationToken token = default)
+    {
+        await foreach (var item in FeedAsync().WithCancellation(token))
+        {
+            token.ThrowIfCancellationRequested();
+
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<T?> FeedAsync([EnumeratorCancellation] CancellationToken token = default)
     {
         while (true)
         {
             while (Queue.TryDequeue(out var instance))
                 yield return instance;
-            _resetEvent.Reset();
-            await _semaphore.WaitAsync();
+            
+            await _semaphore.WaitAsync(token);
+            
+            token.ThrowIfCancellationRequested();
         }
-    }
-
-    private void OnItemConsumed()
-    {
-        _resetEvent.Wait();
     }
 }

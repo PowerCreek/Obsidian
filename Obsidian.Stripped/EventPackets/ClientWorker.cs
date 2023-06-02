@@ -9,23 +9,23 @@ namespace Obsidian.Stripped.EventPackets;
 
 public record ClientWorker(
     ClientInstanceFeedProcessor ClientInstanceFeedProcessor,
-    ClientInstanceUpdateLoop ClientInstanceUpdateLoop,
+    //ClientInstanceUpdateLoop ClientInstanceUpdateLoop,
     ILogger<ClientWorker> Logger
     ) : IHostedService, IDisposable
 {
     public static ICompoundService<ClientWorker>.RegisterServices Register = services => services
-        .With(ClientInstanceUpdateLoop.Register)
         .With(ClientInstanceFeedProcessor.Register)
+        //.With(ClientInstanceUpdateLoop.Register)
         .WithHostedService<ClientWorker>();
 
     private ClientInstanceFeedProcessor ClientInstanceFeedProcessor { get; } = ClientInstanceFeedProcessor;
-    private ClientInstanceUpdateLoop ClientInstanceUpdateLoop { get; } = ClientInstanceUpdateLoop;
+    //private ClientInstanceUpdateLoop ClientInstanceUpdateLoop { get; } = ClientInstanceUpdateLoop;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         Task[] tasks = new[] {
-            ClientInstanceUpdateLoop.LoopInstances(),
-            ClientInstanceFeedProcessor.LoopFeed()
+            ClientInstanceFeedProcessor.LoopFeed(),
+            //ClientInstanceUpdateLoop.LoopInstances(),
         };
 
         await Task.WhenAll(tasks);
