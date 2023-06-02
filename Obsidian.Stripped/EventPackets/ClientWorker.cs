@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Obsidian.Stripped.Host;
+using Obsidian.Stripped.Utilities.Collections;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -19,7 +20,6 @@ public record ClientWorker(
 
     private ClientInstanceFeedProcessor ClientInstanceFeedProcessor { get; } = ClientInstanceFeedProcessor;
     private ClientInstanceUpdateLoop ClientInstanceUpdateLoop { get; } = ClientInstanceUpdateLoop;
-
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {

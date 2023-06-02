@@ -1,11 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Obsidian.Stripped.EventPackets;
+﻿using Microsoft.Extensions.Logging;
 using Obsidian.Stripped.Host;
 using Obsidian.Stripped.Utilities;
 using Obsidian.Stripped.Utilities.Collections;
-using Obsidian.Stripped.Utilities.EventSystem;
-using System.Diagnostics;
 using System.Net.Sockets;
 
 namespace Obsidian.Stripped.Client;
@@ -38,7 +34,7 @@ public record ClientConnectedCallback(
         {
             var NextId = Indexer.GetAvailableTag();
 
-            var instance = GetClientInstance.ClientInstance(NextId, new ClientStreamInterop(socket));
+            var instance = GetClientInstance.ClientInstance(Guid.NewGuid().ToString(), new ClientStreamInterop(socket));
 
             Logger.LogInformation("Collection: " + Indexer.GetContents());
 

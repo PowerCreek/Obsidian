@@ -24,7 +24,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Obsidian.ConsoleApp", "Obsi
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Obsidian.Stripped", "Obsidian.Stripped\Obsidian.Stripped.csproj", "{6230E441-7E5D-46C3-A73E-D6BF0B18A992}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Obsidian.Stripped.Run", "Obsidian.Stripped.Run\Obsidian.Stripped.Run.csproj", "{EC6129E4-6148-4F3A-B971-644183BFC20A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Obsidian.Stripped.Run", "Obsidian.Stripped.Run\Obsidian.Stripped.Run.csproj", "{EC6129E4-6148-4F3A-B971-644183BFC20A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Obsidian.Stripped.Tests", "Obsidian.Stripped.Tests\Obsidian.Stripped.Tests.csproj", "{40C57AFF-F459-44FA-8A5D-8CFB94ED150F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -68,6 +70,10 @@ Global
 		{EC6129E4-6148-4F3A-B971-644183BFC20A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EC6129E4-6148-4F3A-B971-644183BFC20A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EC6129E4-6148-4F3A-B971-644183BFC20A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{40C57AFF-F459-44FA-8A5D-8CFB94ED150F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40C57AFF-F459-44FA-8A5D-8CFB94ED150F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{40C57AFF-F459-44FA-8A5D-8CFB94ED150F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{40C57AFF-F459-44FA-8A5D-8CFB94ED150F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
