@@ -7,8 +7,8 @@ namespace Obsidian.Stripped.Tests;
 
 public class BufferSlab
 {
-    public Channel<(byte[] Data, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> Bag)> DataQueue =
-        Channel.CreateUnbounded<(byte[] Data, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> Bag)>();
+    public Channel<(Memory<byte> Data, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> Bag)> DataQueue =
+        Channel.CreateUnbounded<(Memory<byte> Data, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> Bag)>();
 
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -18,7 +18,7 @@ public class BufferSlab
                 //Debug.WriteLine("Reading: " + entry.UUID);
                 await entry.Sem.WaitAsync();
 
-                yield return bytes.AsMemory().Slice(entry.Position, entry.Size);
+                yield return bytes.Slice(entry.Position, entry.Size);
                 var position = entry.Position + entry.Size;
                 entry.Dispose();
                 if (map.TryRemove(new(position), out entry))
@@ -73,7 +73,7 @@ public class BufferSlab
 
         var entry = new BufferSlabEntry(currentIndex, data.Length);
         bag.TryAdd(entry, entry);
-        data.AsSpan().CopyTo(buffer.AsSpan(currentIndex));
+        data.CopyTo(buffer.AsSpan(currentIndex));
 
         entry.Sem.Release();
     }
