@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
-namespace Obsidian.Tests;
+namespace Obsidian.Stripped.Utilities;
 
 public class BufferSlab
 {
@@ -12,7 +12,6 @@ public class BufferSlab
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach ((var a, var b) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
-        {
             for (var sem = b[new BufferSlabEntry(0, 0, null)]; ;)
             {
                 await sem.Sem.WaitAsync();
@@ -22,11 +21,10 @@ public class BufferSlab
                 if (b.TryGetValue(sem with
                 {
                     Position = sem.Position + sem.Size,
-                }, out sem)) { continue; }
-
+                }, out sem)) continue;
                 break;
             }
-        };
+;
     }
 
     int Index = 0;
@@ -37,13 +35,13 @@ public class BufferSlab
     public byte[] CurrentBuffer;
     public ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> BagCatch = new();
 
+
     public BufferSlab(int threshold)
     {
         Threshold = threshold;
         CurrentBuffer = new byte[Threshold * 2];
         DataQueue.Writer.TryWrite((CurrentBuffer, BagCatch));
     }
-
 
     public int GetStart(int size, out byte[] buffer, out BufferSlabEntry entry)
     {
