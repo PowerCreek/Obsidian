@@ -7,15 +7,15 @@ public class ByteWriteTests
     [Fact(DisplayName = "WriteSlab")]
     public async Task Test()
     {
-        var Slab = new BufferSlab(1300);
-        var ITEMS = new byte[1300].Select((e) => (byte)new Random().Next()).ToArray();
+        var Slab = new BufferSlab(3000);
+        var ITEMS = new byte[2300].Select((e) => (byte)new Random().Next()).ToArray();
 
         var byteArray = new byte[0];
         Array.Fill(byteArray, (byte)1);
 
         var check = new List<byte[]>();
 
-        for (var i = 0; i < 405; i += 2)
+        for (var i = 0; i < 1200; i += 2)
         {
             check.Add(byteArray = new byte[Math.Min(i + 50, ITEMS.Length)]);
             ITEMS.AsSpan(0, byteArray.Length).ToArray().CopyTo(byteArray, 0);

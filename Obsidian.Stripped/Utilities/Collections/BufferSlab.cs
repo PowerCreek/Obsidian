@@ -12,20 +12,24 @@ public class BufferSlab
 
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
+        await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken)) {
             for (var entry = map[new(0)]; ;)
             {
                 //Debug.WriteLine("Reading: " + entry.UUID);
                 await entry.Sem.WaitAsync();
 
                 yield return bytes.Slice(entry.Position, entry.Size);
+                
                 var position = entry.Position + entry.Size;
+                
                 entry.Dispose();
+                
                 if (map.TryRemove(new(position), out entry))
                     continue;
 
                 break;
             }
+        }
     }
 
     int Index = 0;
@@ -33,16 +37,26 @@ public class BufferSlab
     public ManualResetEventSlim Reset = new(false);
 
     public bool BagFull = false;
-    public byte[] CurrentBuffer;
+    public byte[][] CurrentBuffer;
     public ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> BagCatch = new();
 
     public BufferSlab(int threshold)
     {
         Threshold = threshold;
-        CurrentBuffer = new byte[Threshold];
-        DataQueue.Writer.TryWrite((CurrentBuffer, BagCatch));
+        CreateBuffer();
+        WriteMemory(CurrentBuffer, BagCatch);
     }
 
+    public void CreateBuffer(int? threshold = null)
+    {
+        var bytes = new byte[threshold??Threshold];
+        CurrentBuffer = new byte[][] { bytes };
+    }
+
+    public void WriteMemory(byte[][] buffer, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bagCatch)
+    {
+        DataQueue.Writer.TryWrite((new Memory<byte>(buffer[0]), bagCatch));
+    }
 
     public int GetStart(int size, out ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bag, out byte[] buffer)
     {
@@ -50,16 +64,45 @@ public class BufferSlab
 
         lock (Reset)
         {
-            if ((sIndex = Index += size) > Threshold)
+            switch ((sIndex = Index += size))
             {
-                CurrentBuffer = new byte[Threshold];
-                BagCatch = new();
-                DataQueue.Writer.TryWrite((CurrentBuffer, BagCatch));
-                sIndex = size;
-                Index = sIndex;
+                case { } when sIndex > CurrentBuffer[0].Length && size > Threshold:
+                    CreateBuffer(size);
+                    BagCatch = new();
+                    WriteMemory(CurrentBuffer, BagCatch);
+                    sIndex = size;
+                    Index = sIndex;
+                    break;
+
+                case { } when size > CurrentBuffer[0].Length:
+                    CreateBuffer(size);
+                    BagCatch = new();
+                    WriteMemory(CurrentBuffer, BagCatch);
+                    sIndex = size;
+                    Index = sIndex;
+                    break;
+
+                case { } when size > Threshold:
+                    CreateBuffer(size * 2);
+                    BagCatch = new();
+                    WriteMemory(CurrentBuffer, BagCatch);
+                    sIndex = size;
+                    Index = sIndex;
+                    break;
+
+                case { } when sIndex > Threshold:
+                    CreateBuffer();
+                    BagCatch = new();
+                    WriteMemory(CurrentBuffer, BagCatch);
+                    sIndex = size;
+                    Index = sIndex;
+                    break;
+
+                default:
+                    break;
             }
 
-            buffer = CurrentBuffer;
+            buffer = CurrentBuffer[0];
             bag = BagCatch;
         }
 
