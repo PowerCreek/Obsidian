@@ -6,17 +6,20 @@ using Obsidian.Stripped.EventPackets.Channels;
 using SharpNoise.Modules;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Sockets;
+using Obsidian.Net.Packets;
 
 namespace Obsidian.Stripped.Interop;
 public class PacketProcessor(
-    ILogger<PacketProcessor> Logger
+    ILogger<PacketProcessor> Logger,
+    StateActions StateActions
     )
 {
     public static ICompoundService<PacketProcessor>.RegisterServices Register = services => services
         .WithSingleton<Func<ClientMapValue, PacketProcessor>>(s => c => s.GetRequiredService<PacketProcessor>().CreateProcessor(c))
+        .WithTransient<StateActions>()
         .WithTransient<PacketProcessor>();
 
-    private ClientMapValue Client { get; set; } = new ClientMapValue();
+    public ClientMapValue Client { get; set; } = new ClientMapValue();
 
     public PacketProcessor CreateProcessor(ClientMapValue value)
     {
@@ -26,8 +29,11 @@ public class PacketProcessor(
 
     public Socket Socket { get; set; }
 
+    public StateActions StateActions { get; private set; } = StateActions;
+
     public async void Init(ClientMapValue value)
     {
+        StateActions = StateActions.Init(this);
         Client = value;
         var channelOperator = value.Channel;
         channelOperator.SetupChannel(t => OnRead(t));
@@ -36,7 +42,7 @@ public class PacketProcessor(
         var interop = value.Instance.ClientStreamInterop;
         Socket = interop.Socket;
 
-        var minecraftStream = interop.MinecraftStream;        
+        var minecraftStream = interop.MinecraftStream;
         var rawPacketDataChannel = Channel.CreateUnbounded<(int Id, Memory<byte>)>();
 
         ReadPackets(rawPacketDataChannel);
@@ -48,7 +54,7 @@ public class PacketProcessor(
         var memoryChannel = Channel.CreateUnbounded<Memory<byte>>();
         ReadMemory(memoryChannel.Reader);
 
-        GatherPacketBytes(stream, memoryChannel.Writer);
+        GatherPacketBytes(memoryChannel.Writer);
     }
 
     public async void ReadMemory(ChannelReader<Memory<byte>> memoryChannel)
@@ -58,6 +64,7 @@ public class PacketProcessor(
             (int Id, Memory<byte> Data) = await DataHandling.SlicePacketSegment(data);
 
             //do something here
+            StateLoop(Id, Data);
 
             Logger.LogInformation(string.Join(",", Data.ToArray().Prepend((byte)Id)));
         };
@@ -71,26 +78,39 @@ public class PacketProcessor(
         };
     }
 
-    public async void GatherPacketBytes(MinecraftStream stream, ChannelWriter<Memory<byte>> writer)
+    public async void GatherPacketBytes(ChannelWriter<Memory<byte>> writer)
     {
         //Deal with packet timeout
-        using var netStream = new NetworkStream(Socket);
-        while (true)
+        try
         {
-            var byteIntake = new byte[1];
-            await Socket.ReceiveAsync(byteIntake);
-            
-            var packetSize = await netStream.GetBytesWithStartAsync(byteIntake[0])
+            using var netStream = new NetworkStream(Socket);
+            await foreach (var bytes in ProducePacketBytes(Socket, netStream))
+            {
+                _ = writer.WriteAsync(bytes);
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex.ToString());
+        }
+    }
+
+    public async IAsyncEnumerable<Memory<byte>> ProducePacketBytes(Socket socket, Stream stream)
+    {
+        var byteIntake = new byte[1];
+        while (await socket.ReceiveAsync(byteIntake = new byte[1]) is int count and > 0)
+        {
+            var packetSize = await stream.GetBytesWithStartAsync(byteIntake[0])
                 .ReadVarIntFromAsyncEnumerable();
 
             var receivedData = new byte[packetSize].AsMemory();
 
             var len = 0;
 
-            len = await netStream.ReadAsync(receivedData);
+            len = await stream.ReadAsync(receivedData);
 
             if (len != 0 && len == packetSize)
-                _ = writer.WriteAsync(receivedData);
+                yield return receivedData;
         }
     }
 
@@ -99,10 +119,78 @@ public class PacketProcessor(
         Logger.LogInformation($"Read Client Data: {t}");
     }
 
+    public ClientState State { get; set; } = ClientState.Handshaking;
 
-    public async void StateLoop()
+
+    public async void StateLoop(int id, Memory<byte> data)
     {
+        (await GetStateAction(id))?.Invoke(data);
 
+        async Task<Action<Memory<byte>>> GetStateAction(int packetId)
+        {
+            return (State, id) switch
+            {
+                { State: ClientState.Status, id: 0x00 } =>
+                    a =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Status));
+                    }
+                ,
+                { State: ClientState.Status, id: 0x01 } =>
+                    a =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Status));
+                    }
+                ,
+                { State: ClientState.Handshaking, id: 0x00 } =>
+                    data =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Handshaking));
+                        StateActions.OnHandshake0x00(data);
+                    }
+                ,
+                { State: ClientState.Handshaking } =>
+                    a =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Handshaking));
+                    }
+                ,
+                { State: ClientState.Login, id: 0x00 } =>
+                    a =>
+                    {
+                        Logger.LogWarning($"{nameof(ClientState.Login)} 0x00");
+                        StateActions.OnLogin0x00(data);
+                    }
+                ,
+                { State: ClientState.Login, id: 0x01 } =>
+                    a =>
+                    {
+                        Logger.LogWarning($"{nameof(ClientState.Login)} 0x01");
+                        StateActions.OnLogin0x00(data);
+                    }
+                ,
+                { State: ClientState.Login, id: 0x02 } =>
+                    a =>
+                    {
+                        Logger.LogWarning($"{nameof(ClientState.Login)} 0x02");
+                        StateActions.OnLogin0x00(data);
+                    }
+                ,
+                { State: ClientState.Play } =>
+                    a =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Play));
+                    }
+                ,
+                { State: ClientState.Closed } =>
+                    a =>
+                    {
+                        Logger.LogWarning(nameof(ClientState.Closed));
+                    }
+                ,
+                _ => default!
+            };
+        }
     }
 }
 
@@ -124,7 +212,7 @@ public static class MinecraftStreamExt
     {
         int numRead = 0;
         int result = 0;
-        await foreach(var read in bytes) 
+        await foreach (var read in bytes)
         {
             int value = read & 0b01111111;
             result |= value << (7 * numRead);
