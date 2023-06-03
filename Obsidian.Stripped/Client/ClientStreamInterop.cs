@@ -7,6 +7,7 @@ public record ClientStreamInterop
     private NetworkStream _stream { get; }
     public MinecraftStream MinecraftStream { get; }
     public Socket Socket { get; }
+
     
     public ClientStreamInterop(Socket socket)
     {

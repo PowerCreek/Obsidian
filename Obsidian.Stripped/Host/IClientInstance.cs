@@ -2,7 +2,6 @@
 using Obsidian.Stripped.EventPackets;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks.Dataflow;
-using Obsidian.Stripped.Utilities.Collections;
 using Obsidian.Stripped.Utilities.EventSystem;
 using Microsoft.Extensions.Logging;
 

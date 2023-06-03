@@ -16,8 +16,4 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Obsidian\Obsidian.csproj" />
 	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Interop\" />
-	</ItemGroup>
 </Project>
