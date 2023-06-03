@@ -1,11 +1,9 @@
-﻿using Obsidian.Entities;
+﻿using Obsidian.Stripped.Utilities.Collections;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
-namespace Obsidian.Tests;
+namespace Obsidian.Stripped.Tests;
 
 public class BufferSlab
 {
@@ -15,25 +13,19 @@ public class BufferSlab
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
-        {
-            for (var entry = map[new (0)]; ;)
+            for (var entry = map[new(0)]; ;)
             {
-                Debug.WriteLine("Reading: "+entry.UUID);
+                //Debug.WriteLine("Reading: " + entry.UUID);
                 await entry.Sem.WaitAsync();
 
                 yield return bytes.AsMemory().Slice(entry.Position, entry.Size);
-                
-                if (map.TryGetValue(entry with
-                {
-                    Position = entry.Position + entry.Size,
-                }, out entry))
-                {
+                var position = entry.Position + entry.Size;
+                entry.Dispose();
+                if (map.TryRemove(new(position), out entry))
                     continue;
-                }
 
                 break;
             }
-        };
     }
 
     int Index = 0;
@@ -79,7 +71,7 @@ public class BufferSlab
     {
         var currentIndex = GetStart(data.Length, out var bag, out var buffer);
 
-        var entry = new BufferSlabEntry(currentIndex, data.Length, new SemaphoreSlim(0));
+        var entry = new BufferSlabEntry(currentIndex, data.Length);
         bag.TryAdd(entry, entry);
         data.AsSpan().CopyTo(buffer.AsSpan(currentIndex));
 

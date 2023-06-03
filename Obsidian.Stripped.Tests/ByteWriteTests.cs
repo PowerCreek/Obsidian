@@ -1,8 +1,6 @@
 ﻿using Shouldly;
-using System.Diagnostics;
-using Xunit.Abstractions;
 
-namespace Obsidian.Tests;
+namespace Obsidian.Stripped.Tests;
 public class ByteWriteTests
 {
 
@@ -10,14 +8,14 @@ public class ByteWriteTests
     public async Task Test()
     {
         var Slab = new BufferSlab(1300);
-        byte[] ITEMS = new byte[1300].Select((e) => (byte)new Random().Next()).ToArray();
+        var ITEMS = new byte[1300].Select((e) => (byte)new Random().Next()).ToArray();
 
         var byteArray = new byte[0];
         Array.Fill(byteArray, (byte)1);
 
         var check = new List<byte[]>();
-        
-        for (int i = 0; i < 405; i += 2)
+
+        for (var i = 0; i < 405; i += 2)
         {
             check.Add(byteArray = new byte[Math.Min(i + 50, ITEMS.Length)]);
             ITEMS.AsSpan(0, byteArray.Length).ToArray().CopyTo(byteArray, 0);
@@ -28,16 +26,15 @@ public class ByteWriteTests
         try
         {
             await foreach (var v in Slab.GetData().WithCancellation(new CancellationTokenSource(1000).Token))
-            {
                 items.Add(v.ToArray());
-            };
+            ;
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
 
         }
 
-        for(int i = 0; i < check.Count; i++)
+        for (var i = 0; i < check.Count; i++)
         {
             var ValueA = check[i];
             var ValueB = items[i];
