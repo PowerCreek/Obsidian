@@ -1,5 +1,6 @@
 ﻿using Obsidian.Entities;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -13,18 +14,22 @@ public class BufferSlab
 
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach ((var a, var b) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
+        await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
         {
-            for (var sem = b[new BufferSlabEntry(0, 0, null)]; ;)
+            for (var entry = map[new (0)]; ;)
             {
-                await sem.Sem.WaitAsync();
+                Debug.WriteLine("Reading: "+entry.UUID);
+                await entry.Sem.WaitAsync();
 
-                yield return a.AsMemory().Slice(sem.Position, sem.Size);
-
-                if (b.TryGetValue(sem with
+                yield return bytes.AsMemory().Slice(entry.Position, entry.Size);
+                
+                if (map.TryGetValue(entry with
                 {
-                    Position = sem.Position + sem.Size,
-                }, out sem)) { continue; }
+                    Position = entry.Position + entry.Size,
+                }, out entry))
+                {
+                    continue;
+                }
 
                 break;
             }

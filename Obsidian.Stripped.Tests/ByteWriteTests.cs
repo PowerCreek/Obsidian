@@ -1,4 +1,6 @@
 ﻿using Shouldly;
+using System.Diagnostics;
+using Xunit.Abstractions;
 
 namespace Obsidian.Tests;
 public class ByteWriteTests
