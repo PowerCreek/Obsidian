@@ -7,6 +7,7 @@ using SharpNoise.Modules;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Sockets;
 using Obsidian.Net.Packets;
+using Obsidian.Stripped.DataInformation;
 
 namespace Obsidian.Stripped.Interop;
 public class PacketProcessor(
@@ -15,9 +16,9 @@ public class PacketProcessor(
     )
 {
     public static ICompoundService<PacketProcessor>.RegisterServices Register = services => services
-        .WithSingleton<Func<ClientMapValue, PacketProcessor>>(s => c => s.GetRequiredService<PacketProcessor>().CreateProcessor(c))
-        .WithTransient<StateActions>()
-        .WithTransient<PacketProcessor>();
+        .With(StateActions.Register)
+        .WithTransient<PacketProcessor>()
+        .WithSingleton<Func<ClientMapValue, PacketProcessor>>(s => c => s.GetRequiredService<PacketProcessor>().CreateProcessor(c));
 
     public ClientMapValue Client { get; set; } = new ClientMapValue();
 
@@ -122,24 +123,26 @@ public class PacketProcessor(
     public ClientState State { get; set; } = ClientState.Handshaking;
 
 
-    public async void StateLoop(int id, Memory<byte> data)
+    public async void StateLoop(int id, Memory<byte> inputData)
     {
-        (await GetStateAction(id))?.Invoke(data);
+        (await GetStateAction(id))?.Invoke(inputData);
 
-        async Task<Action<Memory<byte>>> GetStateAction(int packetId)
+        async Task<StateAction> GetStateAction(int packetId)
         {
-            return (State, id) switch
+            return await Task.FromResult((State, id) switch
             {
                 { State: ClientState.Status, id: 0x00 } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning(nameof(ClientState.Status));
+                        StateActions.OnStatus0x00(data);
                     }
                 ,
                 { State: ClientState.Status, id: 0x01 } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning(nameof(ClientState.Status));
+                        StateActions.OnStatus0x01(data);
                     }
                 ,
                 { State: ClientState.Handshaking, id: 0x00 } =>
@@ -150,46 +153,46 @@ public class PacketProcessor(
                     }
                 ,
                 { State: ClientState.Handshaking } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning(nameof(ClientState.Handshaking));
                     }
                 ,
                 { State: ClientState.Login, id: 0x00 } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning($"{nameof(ClientState.Login)} 0x00");
                         StateActions.OnLogin0x00(data);
                     }
                 ,
                 { State: ClientState.Login, id: 0x01 } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning($"{nameof(ClientState.Login)} 0x01");
                         StateActions.OnLogin0x00(data);
                     }
                 ,
                 { State: ClientState.Login, id: 0x02 } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning($"{nameof(ClientState.Login)} 0x02");
                         StateActions.OnLogin0x00(data);
                     }
                 ,
                 { State: ClientState.Play } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning(nameof(ClientState.Play));
                     }
                 ,
                 { State: ClientState.Closed } =>
-                    a =>
+                    data =>
                     {
                         Logger.LogWarning(nameof(ClientState.Closed));
                     }
                 ,
-                _ => default!
-            };
+                _ => default(StateAction)!
+            });
         }
     }
 }

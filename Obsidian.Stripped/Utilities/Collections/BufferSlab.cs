@@ -12,18 +12,19 @@ public class BufferSlab
 
     public async IAsyncEnumerable<Memory<byte>> GetData([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken)) {
+        await foreach ((var bytes, var map) in DataQueue.Reader.ReadAllAsync().WithCancellation(cancellationToken))
+        {
             for (var entry = map[new(0)]; ;)
             {
                 //Debug.WriteLine("Reading: " + entry.UUID);
-                await entry.Sem.WaitAsync();
+                await entry.Semaphore.WaitAsync();
 
                 yield return bytes.Slice(entry.Position, entry.Size);
-                
+
                 var position = entry.Position + entry.Size;
-                
+
                 entry.Dispose();
-                
+
                 if (map.TryRemove(new(position), out entry))
                     continue;
 
@@ -37,87 +38,95 @@ public class BufferSlab
     public ManualResetEventSlim Reset = new(false);
 
     public bool BagFull = false;
-    public byte[][] CurrentBuffer;
+    public byte[][] CurrentBuffer = null!;
     public ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> BagCatch = new();
 
     public BufferSlab(int threshold)
     {
         Threshold = threshold;
-        CreateBuffer();
-        WriteMemory(CurrentBuffer, BagCatch);
+        WriteMemory(GetBuffer(), BagCatch);
     }
 
-    public void CreateBuffer(int? threshold = null)
+    private byte[][] GetBuffer()
     {
-        var bytes = new byte[threshold??Threshold];
-        CurrentBuffer = new byte[][] { bytes };
+        return CurrentBuffer ??= CreateBuffer();
     }
 
-    public void WriteMemory(byte[][] buffer, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bagCatch)
+    private byte[][] CreateBuffer(int? threshold = null)
+    {
+        var bytes = new byte[threshold ?? Threshold];
+        return CurrentBuffer = new byte[][] { bytes };
+    }
+
+    private void WriteMemory(byte[][] buffer, ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bagCatch)
     {
         DataQueue.Writer.TryWrite((new Memory<byte>(buffer[0]), bagCatch));
     }
 
-    public int GetStart(int size, out ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bag, out byte[] buffer)
+    private int GetStart(int size, out ConcurrentDictionary<BufferSlabEntry, BufferSlabEntry> bag, out Span<byte> buffer)
     {
         var sIndex = 0;
+        byte[][] bufferHold;
 
         lock (Reset)
         {
-            switch ((sIndex = Index += size))
+            bufferHold = CurrentBuffer;
+            bag = BagCatch;
+
+            sIndex = Index += size;
+
+            void ResetProperties(int? bufferSize = null)
             {
-                case { } when sIndex > CurrentBuffer[0].Length && size > Threshold:
-                    CreateBuffer(size);
-                    BagCatch = new();
-                    WriteMemory(CurrentBuffer, BagCatch);
-                    sIndex = size;
-                    Index = sIndex;
+                bufferHold = CreateBuffer(bufferSize);
+                WriteMemory(bufferHold, BagCatch);
+                sIndex = size;
+                Index = sIndex;
+            }
+
+            switch (sIndex)
+            {
+                case { } when sIndex > bufferHold[0].Length && size > Threshold:
+                    bag = BagCatch = new();
+                    ResetProperties(size);
                     break;
 
-                case { } when size > CurrentBuffer[0].Length:
-                    CreateBuffer(size);
-                    BagCatch = new();
-                    WriteMemory(CurrentBuffer, BagCatch);
-                    sIndex = size;
-                    Index = sIndex;
+                case { } when size > bufferHold[0].Length && size > Threshold:
+                    bag = BagCatch = new();
+                    ResetProperties(size);
                     break;
 
                 case { } when size > Threshold:
-                    CreateBuffer(size * 2);
-                    BagCatch = new();
-                    WriteMemory(CurrentBuffer, BagCatch);
-                    sIndex = size;
-                    Index = sIndex;
+                    bag = BagCatch = new();
+                    ResetProperties(size * 2);
                     break;
 
                 case { } when sIndex > Threshold:
-                    CreateBuffer();
-                    BagCatch = new();
-                    WriteMemory(CurrentBuffer, BagCatch);
-                    sIndex = size;
-                    Index = sIndex;
+                    bag = BagCatch = new();
+                    ResetProperties();
                     break;
 
                 default:
                     break;
             }
 
-            buffer = CurrentBuffer[0];
-            bag = BagCatch;
+            buffer = bufferHold[0];
         }
 
-        var currentIndex = sIndex - size;
-        return currentIndex;
+        buffer = bufferHold[0].AsSpan(sIndex -= size, size);
+
+        return sIndex;
     }
 
-    public async void InsertDataAsync(byte[] data)
+    public (byte[] Data, BufferSlabEntry Entry) InsertDataAsync(byte[] data)
     {
         var currentIndex = GetStart(data.Length, out var bag, out var buffer);
 
         var entry = new BufferSlabEntry(currentIndex, data.Length);
         bag.TryAdd(entry, entry);
-        data.CopyTo(buffer.AsSpan(currentIndex));
+        data.ToArray().CopyTo(buffer);
 
-        entry.Sem.Release();
+        entry.Semaphore.Release();
+
+        return (data, entry);
     }
 }

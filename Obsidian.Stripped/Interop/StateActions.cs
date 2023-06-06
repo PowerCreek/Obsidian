@@ -5,29 +5,40 @@ using Obsidian.Net;
 using Obsidian.Net.Packets;
 using Obsidian.Net.Packets.Handshaking;
 using Obsidian.Net.Packets.Login;
+using Obsidian.Stripped.DataInformation;
+using Obsidian.Stripped.EventPackets;
 using Obsidian.Stripped.Host;
 using Obsidian.Utilities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Obsidian.Stripped.Interop;
 
 public record StateActions(
     ILogger<StateActions> Logger,
-    NetworkMetadata NetworkMetadata
+    NetworkMetadata NetworkMetadata,
+    ConfigureStatus ConfigureStatus,
+    PacketSender PacketSender
     )
 {
     public record struct ClientStateValue(ClientState NextState, bool ShouldDisconnect);
+    public static ICompoundService<StateActions>.RegisterServices Register => services =>
+    services.With(PacketSender.Register)
+    .WithSingleton<ConfigureStatus>()
+    .WithTransient<StateActions>();
+
+    public ConfigureStatus ConfigureStatus { get; set; } = ConfigureStatus;
+    public PacketSender PacketSender { get; set; } = PacketSender;
     public ClientMapValue Client { get; set; }
-    public PacketProcessor Processor { get; set; }
+    public PacketProcessor Processor { get; set; } = null;
 
     public byte[] ValidationToken;
 
     public StateActions Init(PacketProcessor processor)
     {
+        PacketSender = PacketSender with
+        {
+            Map = processor.Client
+        };
+
         return this with 
         {
             Processor = processor,
@@ -35,14 +46,18 @@ public record StateActions(
         };
     }
 
-    public StateAction OnStatus0x00 { get; set; }   = a => 
+    public StateAction OnStatus0x00 => data=> 
     {
-    
+        Logger.LogInformation($"Status 0x00");
+
+
     };
 
-    public StateAction OnStatus0x01 { get; set; } = a => 
+    public StateAction OnStatus0x01 => data =>
     {
-    
+        Logger.LogInformation($"Status 0x01");
+
+        PacketSender.SendPacketToBufferAsync(data);
     };
 
     public StateAction OnHandshake0x00 => data => 

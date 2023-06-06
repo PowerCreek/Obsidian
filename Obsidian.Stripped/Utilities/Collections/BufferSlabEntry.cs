@@ -7,7 +7,7 @@ namespace Obsidian.Stripped.Utilities.Collections;
 public record struct BufferSlabEntry(int Position, int Size) : IEquatable<BufferSlabEntry>, IDisposable
 {
     public static SemaphorePool SemaphorePool = new ();
-    public SemaphoreSlim Sem { get; } = SemaphorePool.GetSemaphore();
+    public SemaphoreSlim Semaphore { get; } = SemaphorePool.GetSemaphore();
 
     public BufferSlabEntry(int position) : this(position, default)
     {
@@ -18,7 +18,7 @@ public record struct BufferSlabEntry(int Position, int Size) : IEquatable<Buffer
     public void Dispose()
     {
         Debug.WriteLine("Disposing:" + UUID);
-        SemaphorePool.ReturnSemaphore(Sem);
+        SemaphorePool.ReturnSemaphore(Semaphore);
     }
     public bool Equals(BufferSlabEntry other) => Position == other.Position;
     public override int GetHashCode() => Position;

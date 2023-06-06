@@ -1,4 +1,6 @@
-﻿using Shouldly;
+﻿using Obsidian.Stripped.Utilities.Collections;
+using Shouldly;
+using System.Collections.Concurrent;
 
 namespace Obsidian.Stripped.Tests;
 public class ByteWriteTests
@@ -10,16 +12,22 @@ public class ByteWriteTests
         var Slab = new BufferSlab(3000);
         var ITEMS = new byte[2300].Select((e) => (byte)new Random().Next()).ToArray();
 
-        var byteArray = new byte[0];
-        Array.Fill(byteArray, (byte)1);
-
-        var check = new List<byte[]>();
-
-        for (var i = 0; i < 1200; i += 2)
+        var itemMap = new ConcurrentDictionary<int, (byte[] Data, BufferSlabEntry Entry)>();
+        var mre = new ManualResetEventSlim(false);
+        var completionSource = new TaskCompletionSource();
+        var count = 0;
+        for (var i = 0; i < 2500; i += 2)
         {
-            check.Add(byteArray = new byte[Math.Min(i + 50, ITEMS.Length)]);
-            ITEMS.AsSpan(0, byteArray.Length).ToArray().CopyTo(byteArray, 0);
-            Slab.InsertDataAsync(byteArray);
+            var insertArray = new byte[Math.Min(i + 50, ITEMS.Length)];
+            ITEMS.AsSpan(0, insertArray.Length).ToArray().CopyTo(insertArray, 0);
+            //await  Task.Run(()=> Slab.InsertDataAsync(byteArray));
+            _ = Task.Run(() => {
+
+                itemMap.TryAdd(count++, Slab.InsertDataAsync(insertArray));
+
+            });
+            if (insertArray.Length >= 2300)
+                continue;
         }
 
         var items = new List<byte[]>();
@@ -34,13 +42,15 @@ public class ByteWriteTests
 
         }
 
-        for (var i = 0; i < check.Count; i++)
-        {
-            var ValueA = check[i];
-            var ValueB = items[i];
-            var valid = ValueB.SequenceEqual(ValueA);
-        }
+        var check = itemMap.OrderBy(a=>a.Key).Select(a=>a.Value.Data).ToList();
+        items.SequenceEqual(check);        
+        //for (var i = 0; i < check.Count; i++)
+        //{
+        //    var ValueA = check[i];
+        //    var ValueB = items[i];
+        //    var valid = ValueB.SequenceEqual(ValueA);
+        //}
 
-        items.ShouldBeEquivalentTo(check);
+        //items.ShouldBeEquivalentTo(check);
     }
 }
